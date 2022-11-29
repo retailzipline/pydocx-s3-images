@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Error>
+    <Code>InvalidPolicyDocument</Code>
+    <Message>The content of the form does not meet the conditions specified in the policy document.</Message>
+    <Details>Invalid exact match name: x-amz-storage-class</Details>
+</Error>
