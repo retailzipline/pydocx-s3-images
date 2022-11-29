@@ -129,14 +129,13 @@ class S3ImageUploader(ImageUploader):
         # as the success action
         if r.status_code == 204:
             image_url = r.headers.get('location', None)
-            if image_url:
-                return unquote(image_url)
 
         # GCS does not return a location header for 204 so, we must use 201
         # and the body content
         if r.status_code == 201:
             image_url = location_value(r.content)
-            if image_url:
-                return image_url
+
+        if image_url:
+            return unquote(image_url)
 
         raise ImageUploadException("S3 Invalid location header")
