@@ -152,6 +152,19 @@ class S3ImageUploaderTestCase(TestCase):
         with self.assertRaisesRegexp(ImageUploadException, 'S3 Invalid location header'):
             s3.upload(img_data, 'image4.png')
 
+    @responses.activate
+    def test_returns_object_url_when_aws_url_with_201_status_code(self):
+        mock_request(status=201, fixture='s3_success_response.xml',
+                     include_location=False)
+
+        signed_request = get_signed_request()
+        img_data = get_fixture('image1.png', as_binary=True)
+
+        s3 = S3ImageUploader(signed_request)
+        result = s3.upload(img_data, 'image1.png', 'png')
+
+        self.assertEqual('http://pydocx.s3.amazonaws.com/uploads/pydocx/image1.png', result)
+
 class GCSImageUploaderTestCase(TestCase):
     @responses.activate
     def test_content_type_not_set_when_gcs_url(self):

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PostResponse>
+    <Location>http://pydocx.s3.amazonaws.com/uploads/pydocx/image1.png</Location>
+    <Bucket>pydocx</Bucket>
+    <Key>uploads/pydocx/image1.png</Key>
+    <ETag>"d41d8cd98f00b204e9800998ecf8427e"</ETag>
+</PostResponse>
