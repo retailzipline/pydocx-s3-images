@@ -21,6 +21,27 @@ class ImageUploader(object):
         raise NotImplementedError("Implement upload method")
 
 
+def is_xml(string):
+    try:
+        ElementTree.fromstring(string)
+    except ElementTree.ParseError:
+        return False
+    return True
+
+
+def location_value(bytes):
+    if is_xml(bytes.decode('utf-8')):
+        element_body = ElementTree.fromstring(bytes)
+        location_element = element_body.find("Location")
+
+        if location_element is not None:
+            return location_element.text
+        else:
+            return None
+    else:
+        return None
+
+
 class S3ImageUploader(ImageUploader):
     def __init__(self, signed_data):
         if isinstance(signed_data, six.string_types):
@@ -31,7 +52,7 @@ class S3ImageUploader(ImageUploader):
         self._bucket_name = None
         self._s3_url = None
 
-        self.OK_STATUS = 204
+        self.OK_STATUS = [201, 204]
         self.S3_ERROR_STATUS = 403
 
         self.AWS_URL = 'https://{bucket_name}.s3.amazonaws.com/'
@@ -88,9 +109,10 @@ class S3ImageUploader(ImageUploader):
 
         data = self.signed_data
 
-        data['Content-Type'] = 'image/%s' % image_format
-
         url = self.s3_url
+
+        if 'storage.googleapis.com' not in url:
+            data['Content-Type'] = 'image/%s' % image_format
 
         r = requests.post(url, data=data, files={'file': (filename, img_data)})
 
@@ -100,13 +122,20 @@ class S3ImageUploader(ImageUploader):
             message = error.find("Message").text
 
             raise ImageUploadException("S3 {0} - {1}".format(code, message))
-        elif r.status_code != self.OK_STATUS:
+        elif r.status_code not in self.OK_STATUS:
             raise ImageUploadException("S3 Upload Error: {0}".format(r.text))
 
-        # asw return in location header the url to uploaded image
-        img_url = r.headers.get('location', None)
+        # AWS returns the object URL in a location header when 204 is given
+        # as the success action
+        if r.status_code == 204:
+            image_url = r.headers.get('location', None)
 
-        if img_url:
-            return unquote(img_url)
+        # GCS does not return a location header for 204 so, we must use 201
+        # and the body content
+        if r.status_code == 201:
+            image_url = location_value(r.content)
+
+        if image_url:
+            return unquote(image_url)
 
         raise ImageUploadException("S3 Invalid location header")

@@ -9,6 +9,7 @@ from unittest import TestCase
 import json
 
 import responses
+from responses.matchers import multipart_matcher
 
 from pydocxs3upload.exceptions import ImageUploadException
 from pydocxs3upload.image_upload import S3ImageUploader, ImageUploader
@@ -19,6 +20,11 @@ def get_signed_request():
     signed_request = get_fixture('upload_signed_request.json', as_binary=True)
     signed_request = json.loads(signed_request)
 
+    return signed_request
+
+def get_signed_request_for_gcs():
+    signed_request = get_signed_request()
+    signed_request['url'] = 'https://pydocx.storage.googleapis.com'
     return signed_request
 
 
@@ -150,3 +156,97 @@ class S3ImageUploaderTestCase(TestCase):
 
         with self.assertRaisesRegexp(ImageUploadException, 'S3 Invalid location header'):
             s3.upload(img_data, 'image4.png')
+
+    @responses.activate
+    def test_returns_object_url_when_aws_url_with_201_status_code(self):
+        mock_request(status=201, fixture='s3_success_response.xml',
+                     include_location=False)
+
+        signed_request = get_signed_request()
+        img_data = get_fixture('image1.png', as_binary=True)
+
+        s3 = S3ImageUploader(signed_request)
+        result = s3.upload(img_data, 'image1.png', 'png')
+
+        self.assertEqual('http://pydocx.s3.amazonaws.com/uploads/pydocx/image1.png', result)
+
+def mock_gcs_response(image_data=None, filename='image1.png', post_url='https://pydocx.storage.googleapis.com',
+                      status_code=201, xml_body=None):
+    if image_data is None:
+        image_data = get_fixture(filename, as_binary=True)
+
+    signed_mock = get_signed_request()
+    signed_mock.pop('url')
+    files = {"file": (filename, image_data)}
+    responses.add(responses.POST,
+                  post_url,
+                  status=status_code,
+                  match=[multipart_matcher(files, data=signed_mock)],
+                  content_type='multipart/form-data',
+                  body=xml_body)
+
+class GCSImageUploaderTestCase(TestCase):
+    FILENAME = 'image1.png'
+    IMAGE_DATA = get_fixture(FILENAME, as_binary=True)
+
+    @responses.activate
+    def test_content_type_not_set_when_gcs_url(self):
+        xml_body = get_fixture('gcs_success_response.xml', as_binary=True)
+        signed_request = get_signed_request_for_gcs()
+
+        mock_gcs_response(xml_body=xml_body)
+
+        S3ImageUploader(signed_request).upload(self.IMAGE_DATA, self.FILENAME, 'png')
+
+    @responses.activate
+    def test_fails_when_gcs_url_with_204_status_code(self):
+        signed_request = get_signed_request_for_gcs()
+
+        mock_gcs_response(status_code=204)
+
+        with self.assertRaisesRegexp(ImageUploadException, 'S3 Invalid location header'):
+            S3ImageUploader(signed_request).upload(self.IMAGE_DATA, self.FILENAME, 'png')
+
+    @responses.activate
+    def test_object_url_returned_when_gcs_url(self):
+        xml_body = get_fixture('gcs_success_response.xml', as_binary=True)
+        signed_request = get_signed_request_for_gcs()
+
+        mock_gcs_response(xml_body=xml_body)
+
+        expected_url = 'https://storage.googleapis.com/urkle/o/zipline/communications/626f40b5-3b6b-4f58-bb76-312400168b4c/16692490480691016-image1.png'
+        result = S3ImageUploader(signed_request).upload(self.IMAGE_DATA, self.FILENAME, 'png')
+        self.assertEqual(expected_url, result)
+
+    @responses.activate
+    def test_fails_when_gcs_url_and_no_location_element(self):
+        xml_body = get_fixture('gcs_missing_location_element_response.xml', as_binary=True)
+        signed_request = get_signed_request_for_gcs()
+
+        mock_gcs_response(xml_body=xml_body)
+
+        with self.assertRaisesRegexp(ImageUploadException, 'S3 Invalid location header'):
+            S3ImageUploader(signed_request).upload(self.IMAGE_DATA, self.FILENAME, 'png')
+
+    @responses.activate
+    def test_fails_when_gcs_url_and_response_body_not_xml(self):
+        signed_request = get_signed_request_for_gcs()
+
+        mock_gcs_response(xml_body='Howdy!')
+
+        with self.assertRaisesRegexp(ImageUploadException, 'S3 Invalid location header'):
+            S3ImageUploader(signed_request).upload(self.IMAGE_DATA, self.FILENAME, 'png')
+
+    @responses.activate
+    def test_fails_when_gcs_url_and_error_response(self):
+        xml_body = get_fixture('gcs_invalid_policy_response.xml', as_binary=True)
+        signed_request = get_signed_request_for_gcs()
+
+        mock_gcs_response(xml_body=xml_body, status_code=400)
+
+        with self.assertRaises(ImageUploadException) as capture:
+            S3ImageUploader(signed_request).upload(self.IMAGE_DATA, self.FILENAME, 'png')
+        exception = str(capture.exception)
+
+        expected_message = "S3 Upload Error: {0}".format(xml_body)
+        self.assertEqual(exception, expected_message)
