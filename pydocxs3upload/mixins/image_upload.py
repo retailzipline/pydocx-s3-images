@@ -15,6 +15,7 @@ class S3ImageUploadMixin(object):
     def __init__(self, *args, **kwargs):
         s3_upload = kwargs.pop('s3_upload', None)
         self.unique_filename = kwargs.pop('unique_filename', True)
+        self.s3_bucket = kwargs.pop('s3_bucket', '')
 
         # we may specify a custom uploader class to be used
         uploader_cls = kwargs.pop('uploader_cls', S3ImageUploader)
