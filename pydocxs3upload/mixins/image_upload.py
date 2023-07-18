@@ -7,7 +7,7 @@ from __future__ import (
 import time
 
 from ..util.image import get_image_data_and_filename
-from ..util.uri import get_uri_filename, uri_is_external, uri_is_self_hosted
+from ..util.uri import get_uri_filename, uri_is_external
 from ..image_upload import S3ImageUploader
 
 
@@ -27,27 +27,26 @@ class S3ImageUploadMixin(object):
         if self.first_pass or not image:
             return ''
 
-        if not uri_is_self_hosted(image.uri, self.s3_bucket):
-            filename = get_uri_filename(image.uri)
+        filename = get_uri_filename(image.uri)
 
-            if uri_is_external(image.uri):
-                image_data, filename = get_image_data_and_filename(
-                    image.uri,
-                    filename,
-                )
-            else:
-                image.stream.seek(0)
-                image_data = image.stream.read()
+        if uri_is_external(image.uri):
+            image_data, filename = get_image_data_and_filename(
+                image.uri,
+                filename,
+            )
+        else:
+            image.stream.seek(0)
+            image_data = image.stream.read()
 
-            if self.unique_filename:
-                # make sure that the filename is unique so that it will not rewrite
-                # existing images from s3
-                filename = "%s-%s" % (str(time.time()).replace('.', ''), filename)
+        if self.unique_filename:
+            # make sure that the filename is unique so that it will not rewrite
+            # existing images from s3
+            filename = "%s-%s" % (str(time.time()).replace('.', ''), filename)
 
-            s3_url = self.image_uploader.upload(image_data, filename)
+        s3_url = self.image_uploader.upload(image_data, filename)
 
-            # set the external uri to the amazon s3
-            image.uri = s3_url
+        # set the external uri to the amazon s3
+        image.uri = s3_url
 
         return super(S3ImageUploadMixin, self, ).get_image_tag(image,
                                                                width,

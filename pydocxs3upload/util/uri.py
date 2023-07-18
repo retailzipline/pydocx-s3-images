@@ -57,7 +57,3 @@ def uri_is_internal(uri):
 
 def uri_is_external(uri):
     return not uri_is_internal(uri)
-
-def uri_is_self_hosted(uri, bucket_name=''):
-    s3_bucket_url = "https://%s.s3.amazonaws.com" % (bucket_name)
-    return uri.startswith(s3_bucket_url)
